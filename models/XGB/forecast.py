@@ -2,6 +2,8 @@ from typing import Tuple, List
 from dataclasses import dataclass
 from collections import defaultdict
 
+from sklearn.metrics import mean_squared_error
+
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
@@ -82,14 +84,61 @@ def plot_forecast(dataset_series: pd.Series, forecast_series: List[pd.Series], i
     plt.show()
 
 
-def plot_forecast_ar(dataset_series: pd.Series, forecast_series: pd.Series, xlim: Tuple[int, int], n_steps_in: int):
+def get_RMSE(y: pd.Series, y_hat: pd.Series, window: int = 10) -> Tuple[str, float, pd.Series]:
     
+    rmse = np.sqrt(np.mean((y_hat - y)**2))
+    rolling_rmse = y.rolling(window).apply(
+        lambda x: np.sqrt(mean_squared_error(x, y_hat[x.index])),
+        raw=False
+    )
+
+    return "RMSE", rmse, rolling_rmse
+
+
+def get_MAPE(y: pd.Series, y_hat: pd.Series, window: int = 10) -> Tuple[str, float, pd.Series]:
+    
+    err = y_hat - y
+    mape_vals = (np.abs((err) / y) * 100)
+    mape = np.mean(mape_vals[mape_vals < np.inf])
+    rolling_mape = y_hat.rolling(10).apply(
+        lambda y: np.mean(np.abs(((err) / y) * 100)),
+        raw=False
+    )
+
+    return "MAPE", mape, rolling_mape
+
+
+METRICES_MAP = {
+    "RMSE": get_RMSE,
+    "MAPE": get_MAPE
+}
+
+
+def plot_forecast_ar(
+    dataset_series: pd.Series,
+    forecast_series: pd.Series,
+    xlim: Tuple[int, int],
+    n_steps_in: int,
+    metric_name: str = "RMSE"
+):
+
+    # Calculate metrices
+    metric_func = METRICES_MAP[metric_name.upper()]
+    metric_name, metric, metric_series = metric_func(y=dataset_series[forecast_series.index], y_hat=forecast_series)
+    
+    # Scatter original data
     plt.scatter(dataset_series.index, dataset_series.values, color='tab:blue', label='Original', s=2)
+
+    # Scatter forecast
     plt.scatter(forecast_series.index, forecast_series.values, color="tab:orange", label='Prediction', s=2)
+
+    # Scatter evaluation metric
+    plt.plot(metric_series.index, metric_series.values, color="red", label=metric_name, alpha=0.5)
 
     plt.legend()
     plt.xlabel("Month index")
     plt.ylabel("Monthly Mean Total Sunspot Number")
-    plt.title(f"Autoregressive forecast for {n_steps_in} values lookbehind")
+    plt.title(f"Autoregressive forecast for {n_steps_in} values lookbehind\n{metric_name}: {round(metric, 3)}")
     plt.xlim(xlim)
+    plt.ylim(top=dataset_series.max()*1.4)
     plt.show()
