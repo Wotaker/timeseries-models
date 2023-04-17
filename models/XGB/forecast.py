@@ -118,7 +118,7 @@ def plot_forecasts(
     plt.ylabel("Monthly Mean Total Sunspot Number")
     plt.title(f"Sumaric forecast results\n{metric_name}: {round(metric_aggregated, 3)}")
     plt.xlim(xlim)
-    plt.ylim(top=dataset_series.max()*1.2)
+    plt.ylim(-20, dataset_series.max() * 1.2)
     plt.show()
 
 
@@ -150,7 +150,7 @@ def plot_forecast(
     plt.ylabel("Monthly Mean Total Sunspot Number")
     plt.title(f"Forecast since {idx + 1}{suffix[idx + 1]} data patch\n{metric_name}: {round(metric, 3)}")
     plt.xlim(xlim)
-    plt.ylim(top=dataset_series.max()*1.2)
+    plt.ylim(-20, dataset_series.max() * 1.2)
     plt.show()
 
 
@@ -180,5 +180,5 @@ def plot_forecast_ar(
     plt.ylabel("Monthly Mean Total Sunspot Number")
     plt.title(f"Autoregressive forecast for {n_steps_in} values lookbehind\n{metric_name}: {round(metric, 3)}")
     plt.xlim(xlim)
-    plt.ylim(top=dataset_series.max()*1.2)
+    plt.ylim(-20, dataset_series.max() * 1.2)
     plt.show()
