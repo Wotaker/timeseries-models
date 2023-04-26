@@ -19,16 +19,17 @@ def window_forecast(past_data_batch: npt.NDArray, pretrained_model: xgb.XGBRegre
 def ar_forecast(
     train_x,
     pretrained_model: xgb.XGBRegressor,
-    test_ds_size: int
+    test_ds_size: int,
+    n_steps_out: int
 ) -> npt.NDArray[np.float64]:
     
-    init_window = np.expand_dims(train_x[-1], axis=0)
-    predictions = np.array([])
-    for _ in range(test_ds_size):
-        
-        prediction = np.expand_dims(pretrained_model.predict(init_window), axis=0)
-        init_window = np.concatenate((init_window[:, 1:],  prediction), axis=1)
-        predictions = np.append(predictions, prediction[0, 0])
+    init_window = np.expand_dims(train_x[-1, :], axis=0)
+    predictions = np.array([[]])
+
+    for _ in range(test_ds_size // n_steps_out):
+        prediction = np.reshape(pretrained_model.predict(init_window), (1, -1))
+        init_window = np.concatenate((init_window[:, n_steps_out:],  prediction), axis=1)
+        predictions = np.append(predictions, prediction)
     
     return predictions
 
@@ -48,8 +49,8 @@ def get_forecast_series(forecast: npt.NDArray, train_ds_size: int, n_steps_in: i
     return series_list
 
 
-def get_forecast_series_ar(forecast: npt.NDArray, train_ds_size: int, test_ds_size) -> pd.Series:
-    return pd.Series(forecast, index=range(train_ds_size, train_ds_size + test_ds_size))
+def get_forecast_series_ar(forecast: npt.NDArray, train_ds_size: int, n_steps_out: int) -> pd.Series:
+    return pd.Series(forecast, index=range(train_ds_size - n_steps_out, train_ds_size + forecast.size - n_steps_out))
 
 
 def get_RMSE(y: pd.Series, y_hat: pd.Series, window: int = 10) -> Tuple[str, float, pd.Series]:
