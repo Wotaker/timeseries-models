@@ -3,3 +3,5 @@ other/
 venv/
 .venv/
 **/*egg-info
+build/
+.venv/
