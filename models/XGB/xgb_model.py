@@ -50,13 +50,15 @@ class Plotter():
         forecast_series: List[pd.Series],
         xlim: Tuple[int, int] | None = None,
         ylim: Tuple[int, int] | None = None,
-        metric_name: str = "RMSE"
+        metric_name: str = "RMSE",
+        linestyle: str = 'None'
     ):
 
         metric_func = self.metrices_map[metric_name.upper()]
 
         # Scatter original data
-        plt.scatter(self.dataset_series.index, self.dataset_series.values, color='tab:blue', label='Original', s=2)
+        plt.plot(self.dataset_series.index, self.dataset_series.values, color='tab:blue', label='Original',
+                 marker='.', markersize=2, linestyle=linestyle)
 
         metric_vals = list()
         for series in forecast_series:
@@ -66,7 +68,8 @@ class Plotter():
             metric_vals.append(metric)
             
             # Scatter forecast
-            plt.scatter(series.index, series.values, color="tab:orange", s=2, alpha=0.1)
+            plt.plot(series.index, series.values, color="tab:orange", alpha=0.1,
+                     marker='.', markersize=2, linestyle=linestyle)
 
             # Plot evaluation metric
             plt.plot(metric_series.index, metric_series.values, color="red", alpha=0.1, lw=1)
@@ -74,7 +77,7 @@ class Plotter():
         metric_aggregated = np.mean(np.array(metric_vals))
 
         # Legend hack
-        plt.scatter([-10], [0], color="tab:orange", label='Prediction', s=2)
+        plt.plot([-10], [0], color="tab:orange", label='Prediction', marker='.', markersize=2, linestyle=linestyle)
         plt.plot([-10, -9], [0, 0], color="red", label=metric_name, alpha=0.5, lw=1)
 
         plt.legend()
@@ -91,7 +94,8 @@ class Plotter():
         forecast_series: pd.Series,
         xlim: Tuple[int, int] | None = None,
         ylim: Tuple[int, int] | None = None,
-        metric_name: str = "RMSE"
+        metric_name: str = "RMSE",
+        linestyle: str = 'None'
     ):
 
         # Calculate metrices
@@ -99,10 +103,12 @@ class Plotter():
         metric_name, metric, metric_series = metric_func(y=self.dataset_series[forecast_series.index], y_hat=forecast_series)
 
         # Scatter original data
-        plt.scatter(self.dataset_series.index, self.dataset_series.values, color='tab:blue', label='Original', s=2)
+        plt.plot(self.dataset_series.index, self.dataset_series.values, color='tab:blue', label='Original',
+                 marker='.', markersize=2, linestyle=linestyle)
 
         # Scatter forecast
-        plt.scatter(forecast_series.index, forecast_series.values, color="tab:orange", label='Prediction', s=2)
+        plt.plot(forecast_series.index, forecast_series.values, color="tab:orange", label='Prediction',
+                 marker='.', markersize=2, linestyle=linestyle)
 
         # Plot evaluation metric
         plt.plot(metric_series.index, metric_series.values, color="red", label=metric_name, alpha=0.5)
@@ -127,6 +133,24 @@ class XGBModel(IModel):
             metric: Callable,
             **params: Dict
         ) -> None:
+        """
+        Creates an XGBModel instance by loading and preprocessing the dataset, setting a Plotter to visualize data
+        and setting important flags
+
+        Parameters
+        ----------
+        dataset : pd.DataFrame
+            The raw dataset. XGBModel tries to infer the target column automatically but if fails, you can
+            specify the target column with the 'target_column' parameter manually.
+        n_steps_in : int
+            The number of timesteps to look behind
+        n_steps_out : int
+            The number of future timesteps predicted
+        test_frac : float
+            The ration of test set vs the train set size
+        metric : Callable
+            TODO Now the plotter takes care 
+        """
 
         self.n_steps_in = n_steps_in
         self.n_steps_out = n_steps_out
@@ -136,7 +160,8 @@ class XGBModel(IModel):
             raw_dataset=dataset,
             n_steps_in=n_steps_in,
             n_steps_out=n_steps_out,
-            test_fraction=test_frac
+            test_fraction=test_frac,
+            target_column=params["target_column"] if "target_column" in params.keys() else None
         )
 
         self.plotter = Plotter(self.dataset.series_all)

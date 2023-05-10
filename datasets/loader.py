@@ -27,14 +27,19 @@ class Dataset:
         return self.series_test.size
 
 
-def read_dataset(df: pd.DataFrame) -> Tuple[pd.Series, pd.Series]:
+def read_dataset(df: pd.DataFrame, target_column: str | None = None) -> Tuple[pd.Series, pd.Series]:
     """
-    Tries to extract from the input Dataframe the total values (the values of the analyzed timeseries) and the date labels
+    Tries to extract from the input Dataframe the total values (target column values of the analyzed timeseries)
+    and the date labels.
+    
+    IMPORTANT! This function assumes that the input Dataframe is loaded without index column!
 
     Parameters
     ----------
     df : pd.DataFrame
         The input, raw pandas Dataframe
+    target_column : str | None
+        The name of the target column, if None, takes the last non-date column, by default None
 
     Returns
     -------
@@ -43,12 +48,11 @@ def read_dataset(df: pd.DataFrame) -> Tuple[pd.Series, pd.Series]:
     """
 
     # Preprocess data
-    df.drop(df.columns[0], axis=1, inplace=True)                # Drop index collumn
     if "DATE" in list(map(lambda x: x.upper(), df.keys())):
 
         # Preprocess only if date column is present
         date_idx = list(map(lambda x: x.upper(), df.keys())).index("DATE")
-        df.rename(columns={df.keys()[date_idx]: 'Date'})
+        df.rename(columns={df.keys()[date_idx]: 'Date'}, inplace=True)
         df['Date'] = pd.to_datetime(df['Date'])                 # Always format the date
         df = df.sort_values(['Date'])                           # Sort by date
     else:
@@ -56,7 +60,8 @@ def read_dataset(df: pd.DataFrame) -> Tuple[pd.Series, pd.Series]:
         df['Date'] = 0
 
     # Extract timeseries from original dataframe
-    total_column = df.keys().difference(['Date'])[-1]
+    total_column = target_column if target_column else df.keys().difference(['Date'])[-1]
+    print(f"Target column: '{total_column}'")
     total = df[total_column]
     dates = df['Date']
 
@@ -122,9 +127,10 @@ def load_dataset(
     n_steps_in: int,
     n_steps_out: int = 1,
     test_fraction: float = 0.1,
+    target_column: str | None = None
 ) -> Dataset:
     
-    ds, dates = read_dataset(raw_dataset)
+    ds, dates = read_dataset(raw_dataset, target_column)
     ds_train, ds_test = train_test_split(ds, test_fraction)
 
     train_x, train_y = split_sequence_supervised(ds_train, n_steps_in, n_steps_out, test_split=False, shuffle=False)
