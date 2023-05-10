@@ -49,6 +49,7 @@ class Plotter():
         self,
         forecast_series: List[pd.Series],
         xlim: Tuple[int, int] | None = None,
+        ylim: Tuple[int, int] | None = None,
         metric_name: str = "RMSE"
     ):
 
@@ -81,7 +82,7 @@ class Plotter():
         plt.ylabel("Monthly Mean Total Sunspot Number")
         plt.title(f"Sumaric forecast results\n{metric_name}: {round(metric_aggregated, 3)}")
         plt.xlim(xlim if xlim else (self.dataset_series.index[0], self.dataset_series.index[-1]))
-        plt.ylim(-20, self.dataset_series.max() * 1.2)
+        plt.ylim(ylim) if ylim else plt.ylim(0, self.dataset_series.max() * 1.2)
         plt.show()
     
     
@@ -89,6 +90,7 @@ class Plotter():
         self,
         forecast_series: pd.Series,
         xlim: Tuple[int, int] | None = None,
+        ylim: Tuple[int, int] | None = None,
         metric_name: str = "RMSE"
     ):
 
@@ -110,7 +112,7 @@ class Plotter():
         plt.ylabel("Monthly Mean Total Sunspot Number")
         plt.title(f"{metric_name}: {round(metric, 3)}")
         plt.xlim(xlim)
-        plt.ylim(-20, self.dataset_series.max() * 1.2)
+        plt.ylim(ylim) if ylim else plt.ylim(0, self.dataset_series.max() * 1.2)
         plt.show()
 
 

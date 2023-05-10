@@ -28,14 +28,36 @@ class Dataset:
 
 
 def read_dataset(df: pd.DataFrame) -> Tuple[pd.Series, pd.Series]:
+    """
+    Tries to extract from the input Dataframe the total values (the values of the analyzed timeseries) and the date labels
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The input, raw pandas Dataframe
+
+    Returns
+    -------
+    Tuple[total: pd.Series, dates: pd.Series]
+        The total values and the corresponding dates
+    """
 
     # Preprocess data
-    df.drop(df.columns[0], axis=1, inplace=True)    # Drop index collumn
-    df['Date'] = pd.to_datetime(df['Date'])         # Always format the date
-    df = df.sort_values(['Date'])                   # Sort by date
+    df.drop(df.columns[0], axis=1, inplace=True)                # Drop index collumn
+    if "DATE" in list(map(lambda x: x.upper(), df.keys())):
+
+        # Preprocess only if date column is present
+        date_idx = list(map(lambda x: x.upper(), df.keys())).index("DATE")
+        df.rename(columns={df.keys()[date_idx]: 'Date'})
+        df['Date'] = pd.to_datetime(df['Date'])                 # Always format the date
+        df = df.sort_values(['Date'])                           # Sort by date
+    else:
+
+        df['Date'] = 0
 
     # Extract timeseries from original dataframe
-    total = df['Monthly Mean Total Sunspot Number']
+    total_column = df.keys().difference(['Date'])[-1]
+    total = df[total_column]
     dates = df['Date']
 
     return total, dates
