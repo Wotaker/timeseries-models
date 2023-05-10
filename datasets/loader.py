@@ -27,10 +27,7 @@ class Dataset:
         return self.series_test.size
 
 
-def read_dataset(path: str) -> Tuple[pd.Series, pd.Series]:
-
-    # Read data into a data frame
-    df = pd.read_csv(path)
+def read_dataset(df: pd.DataFrame) -> Tuple[pd.Series, pd.Series]:
 
     # Preprocess data
     df.drop(df.columns[0], axis=1, inplace=True)    # Drop index collumn
@@ -38,10 +35,10 @@ def read_dataset(path: str) -> Tuple[pd.Series, pd.Series]:
     df = df.sort_values(['Date'])                   # Sort by date
 
     # Extract timeseries from original dataframe
-    sunspots_total = df['Monthly Mean Total Sunspot Number']
-    sunspots_dates = df['Date']
+    total = df['Monthly Mean Total Sunspot Number']
+    dates = df['Date']
 
-    return sunspots_total, sunspots_dates
+    return total, dates
 
 
 def train_test_split(dataset: pd.Series, test_fraction=0.1) -> Tuple[pd.Series, pd.Series]:
@@ -99,13 +96,13 @@ def split_sequence_supervised(
 
 
 def load_dataset(
-    ds_path: str,
+    raw_dataset: pd.DataFrame,
     n_steps_in: int,
     n_steps_out: int = 1,
     test_fraction: float = 0.1,
 ) -> Dataset:
     
-    ds, dates = read_dataset(ds_path)
+    ds, dates = read_dataset(raw_dataset)
     ds_train, ds_test = train_test_split(ds, test_fraction)
 
     train_x, train_y = split_sequence_supervised(ds_train, n_steps_in, n_steps_out, test_split=False, shuffle=False)
