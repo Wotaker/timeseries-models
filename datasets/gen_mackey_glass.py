@@ -8,15 +8,20 @@ from argparse import ArgumentParser, ArgumentError
 
 DEFAULT_PATH = os.path.join(os.path.curdir, "MackeyGlass.csv")
 
+MACKEY_GLASS_N   = 10000
+MACKEY_GLASS_B   = 0.1
+MACKEY_GLASS_C   = 0.2
+MACKEY_GLASS_TAU = 25
+
 
 if __name__ == "__main__":
 
     # Parse arguments
     parser = ArgumentParser()
-    parser.add_argument('--n', default=10000, type=int)
-    parser.add_argument('--b', default=0.1, type=float)
-    parser.add_argument('--c', default=0.2, type=float)
-    parser.add_argument('--tau', default=25, type=int)
+    parser.add_argument('--n', default=MACKEY_GLASS_N, type=int)
+    parser.add_argument('--b', default=MACKEY_GLASS_B, type=float)
+    parser.add_argument('--c', default=MACKEY_GLASS_C, type=float)
+    parser.add_argument('--tau', default=MACKEY_GLASS_TAU, type=int)
     parser.add_argument('--plot', default=False, action='store_true')
     parser.add_argument('--path', default=DEFAULT_PATH, type=str)
     args = parser.parse_args()

@@ -14,12 +14,14 @@ from sklearn.metrics import mean_squared_error
 
 class Plotter():
 
-    def __init__(self, dataset: pd.Series) -> None:
+    def __init__(self, dataset: pd.Series, xlabel, ylabel) -> None:
         self.dataset_series = dataset
         self.metrices_map = {
             "RMSE": self.__get_RMSE,
             "MAPE": self.__get_MAPE
         }
+        self.xlabel = xlabel
+        self.ylabel = ylabel
 
     def __get_RMSE(self, y: pd.Series, y_hat: pd.Series, window: int = 10) -> Tuple[str, float, pd.Series]:
         
@@ -81,8 +83,8 @@ class Plotter():
         plt.plot([-10, -9], [0, 0], color="red", label=metric_name, alpha=0.5, lw=1)
 
         plt.legend()
-        plt.xlabel("Month index")
-        plt.ylabel("Monthly Mean Total Sunspot Number")
+        plt.xlabel(self.xlabel)
+        plt.ylabel(self.ylabel)
         plt.title(f"Sumaric forecast results\n{metric_name}: {round(metric_aggregated, 3)}")
         plt.xlim(xlim if xlim else (self.dataset_series.index[0], self.dataset_series.index[-1]))
         plt.ylim(ylim) if ylim else plt.ylim(0, self.dataset_series.max() * 1.2)
@@ -114,12 +116,32 @@ class Plotter():
         plt.plot(metric_series.index, metric_series.values, color="red", label=metric_name, alpha=0.5)
 
         plt.legend()
-        plt.xlabel("Month index")
-        plt.ylabel("Monthly Mean Total Sunspot Number")
+        plt.xlabel(self.xlabel)
+        plt.ylabel(self.ylabel)
         plt.title(f"{metric_name}: {round(metric, 3)}")
         plt.xlim(xlim)
         plt.ylim(ylim) if ylim else plt.ylim(0, self.dataset_series.max() * 1.2)
         plt.show()
+    
+    def plot_dataset(
+        self,
+        xlim: Tuple[int, int] | None = None,
+        ylim: Tuple[int, int] | None = None,
+        linestyle: str = 'None',
+        save_path: str | None = None
+    ):
+        
+        # Scatter original data
+        plt.plot(self.dataset_series.index, self.dataset_series.values, color='tab:blue',
+                 marker='.', markersize=2, linestyle=linestyle)
+        
+        plt.xlabel(self.xlabel)
+        plt.ylabel(self.ylabel)
+        plt.xlim(xlim)
+        plt.ylim(ylim) if ylim else plt.ylim(0, self.dataset_series.max() * 1.2)
+        plt.savefig(save_path, bbox_inches='tight') if save_path else None
+        plt.show()
+        
 
 
 class XGBModel(IModel):
@@ -164,7 +186,9 @@ class XGBModel(IModel):
             target_column=params["target_column"] if "target_column" in params.keys() else None
         )
 
-        self.plotter = Plotter(self.dataset.series_all)
+        xlabel = params["xlabel"] if "xlabel" in params.keys() else None
+        ylabel = params["ylabel"] if "ylabel" in params.keys() else None
+        self.plotter = Plotter(self.dataset.series_all, xlabel, ylabel)
 
         self.forecasts = None
         self.forecast_autoregressive = None
