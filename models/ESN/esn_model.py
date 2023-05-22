@@ -1,4 +1,6 @@
-from typing import Callable, Dict
+from typing import Callable, Dict, Tuple, List
+import matplotlib.pyplot as plt
+from sklearn.metrics import mean_squared_error
 import pandas as pd
 import numpy as np
 from models.imodel import IModel
@@ -8,6 +10,111 @@ import torch.nn
 from auto_esn.esn.esn import DeepESN
 from auto_esn.esn.reservoir.initialization import CompositeInitializer, WeightInitializer
 from auto_esn.esn.reservoir.activation import Activation, Identity
+
+import optuna
+
+
+class Plotter():
+
+    def __init__(self, dataset: pd.Series) -> None:
+        self.dataset_series = dataset
+        self.metrices_map = {
+            "RMSE": self.__get_RMSE,
+            "MAPE": self.__get_MAPE
+        }
+
+    def __get_RMSE(self, y: pd.Series, y_hat: pd.Series, window: int = 10) -> Tuple[str, float, pd.Series]:
+        
+        rmse = np.sqrt(np.mean((y_hat - y)**2))
+        rolling_rmse = y.rolling(window).apply(
+            lambda x: np.sqrt(mean_squared_error(x, y_hat[x.index])),
+            raw=False
+        )
+
+        return "RMSE", rmse, rolling_rmse
+
+
+    def __get_MAPE(self, y: pd.Series, y_hat: pd.Series, window: int = 10) -> Tuple[str, float, pd.Series]:
+        
+        err = y_hat - y
+        mape_vals = (np.abs((err) / y) * 100)
+        mape = np.mean(mape_vals[mape_vals < np.inf])
+        rolling_mape = y_hat.rolling(window).apply(
+            lambda y: np.mean(np.abs(((err) / y) * 100)),
+            raw=False
+        )
+
+        return "MAPE", mape, rolling_mape
+
+
+    def plot_forecasts(
+        self,
+        forecast_series: List[pd.Series],
+        xlim: Tuple[int, int] | None = None,
+        metric_name: str = "RMSE"
+    ):
+
+        metric_func = self.metrices_map[metric_name.upper()]
+
+        # Scatter original data
+        plt.scatter(self.dataset_series.index, self.dataset_series.values, color='tab:blue', label='Original', s=2)
+
+        metric_vals = list()
+        for series in forecast_series:
+
+            # Calculate metrices
+            metric_name, metric, metric_series = metric_func(y=self.dataset_series[series.index], y_hat=series)
+            metric_vals.append(metric)
+            
+            # Scatter forecast
+            plt.scatter(series.index, series.values, color="tab:orange", s=2, alpha=0.1)
+
+            # Plot evaluation metric
+            plt.plot(metric_series.index, metric_series.values, color="red", alpha=0.1, lw=1)
+        
+        metric_aggregated = np.mean(np.array(metric_vals))
+
+        # Legend hack
+        plt.scatter([-10], [0], color="tab:orange", label='Prediction', s=2)
+        plt.plot([-10, -9], [0, 0], color="red", label=metric_name, alpha=0.5, lw=1)
+
+        plt.legend()
+        plt.xlabel("Month index")
+        plt.ylabel("Monthly Mean Total Sunspot Number")
+        plt.title(f"Sumaric forecast results\n{metric_name}: {round(metric_aggregated, 3)}")
+        plt.xlim(xlim if xlim else (self.dataset_series.index[0], self.dataset_series.index[-1]))
+        plt.ylim(-20, self.dataset_series.max() * 1.2)
+        plt.show()
+    
+    
+    def plot_forecast(
+        self,
+        forecast_series: pd.Series,
+        xlim: Tuple[int, int] | None = None,
+        metric_name: str = "RMSE"
+    ):
+
+        # Calculate metrices
+        metric_func = self.metrices_map[metric_name.upper()]
+        metric_name, metric, metric_series = metric_func(y=self.dataset_series[forecast_series.index], y_hat=forecast_series)
+
+        # Scatter original data
+        plt.scatter(self.dataset_series.index, self.dataset_series.values, color='tab:blue', label='Original', s=2)
+
+        # Scatter forecast
+        plt.scatter(forecast_series.index, forecast_series.values, color="tab:orange", label='Prediction', s=2)
+
+        # Plot evaluation metric
+        plt.plot(metric_series.index, metric_series.values, color="red", label=metric_name, alpha=0.5)
+
+        plt.legend()
+        plt.xlabel("Month index")
+        plt.ylabel("Monthly Mean Total Sunspot Number")
+        plt.title(f"{metric_name}: {round(metric, 3)}")
+        plt.xlim(xlim)
+        plt.ylim(-20, self.dataset_series.max() * 1.2)
+        plt.show()
+
 
 
 class ESNModel(IModel):
@@ -21,6 +128,7 @@ class ESNModel(IModel):
             metric: Callable,
             **params: Dict
         ) -> None:
+        self._device = torch.device('cpu')
 
         self.n_steps_in = n_steps_in
         self.n_steps_out = n_steps_out
@@ -33,22 +141,57 @@ class ESNModel(IModel):
             test_fraction=test_frac
         )
 
+        self.plotter = Plotter(self.dataset.series_all)
+
+
         self.forecasts = None
         self.forecast_autoregressive = None
 
-    def fit(self):
-        i = CompositeInitializer()\
-            .with_seed(23)\
-            .sparse(density=0.1)\
-            .spectral_noisy(spectral_radius=1.1, noise_magnitude=0.01)
+    def tune(self, n_trials=50):
+        def objective(trial):
+            density = trial.suggest_float('density', 0, 1)
+            spectral_radius = trial.suggest_float('spectral_radius' ,0.5, 1.5)
+            noise_magnitude = trial.suggest_float('noise_magnitude', 0, 0.1)
+            hidden_size = trial.suggest_int('hidden_size', 50, 1000)
+            i = CompositeInitializer()\
+            .sparse(density=density)\
+            .spectral_noisy(spectral_radius=spectral_radius, noise_magnitude=noise_magnitude)
             # .uniform()\
             # .regular_graph(4)\
             # .scale(0.9)\
+             # .with_seed(23)\
 
+            w = WeightInitializer()
+            w.weight_hh_init = i
+            self.model = DeepESN(initializer = w, input_size=self.n_steps_in, hidden_size=hidden_size)
+            train_x = torch.from_numpy(self.dataset.train_x).to(self._device)
+            train_y = torch.from_numpy(self.dataset.train_y).to(self._device)
+            self.model.fit(train_x, train_y)
+            self.forecasts = None
+            self.forecast_autoregressive = None
+            forecast = self.predict(50, autoreggressive=True)
+            rmse = np.sqrt(np.mean((forecast - self.dataset.series_all[forecast.index][:50])**2))
+            return rmse
+        
+        study = optuna.create_study()
+        study.optimize(objective, n_trials=n_trials)
+        return study.best_params.values()
+
+    def fit(self, density=0.1, spectral_radius=1.1, noise_magnitude=0.01, hidden_size=400):
+        i = CompositeInitializer()\
+            .sparse(density=density)\
+            .spectral_noisy(spectral_radius=spectral_radius, noise_magnitude=noise_magnitude)
+            # .uniform()\
+            # .regular_graph(4)\
+            # .scale(0.9)\
+            # .with_seed(23)\
+        print(hidden_size)
         w = WeightInitializer()
         w.weight_hh_init = i
-        esn = DeepESN(initializer = w, input_size=self.n_steps_in, hidden_size=400)
-        esn.fit(self.dataset.train_x, self.dataset.train_y)
+        self.model = DeepESN(initializer = w, input_size=self.n_steps_in, hidden_size=hidden_size)
+        train_x = torch.from_numpy(self.dataset.train_x).to(self._device)
+        train_y = torch.from_numpy(self.dataset.train_y).to(self._device)
+        self.model.fit(train_x, train_y)
 
         self.forecasts = None
         self.forecast_autoregressive = None
@@ -58,7 +201,7 @@ class ESNModel(IModel):
             return self.forecasts[shift]
 
         # Predict on a test set batch -> multiple predictions shifted by one timestep
-        predictions = np.squeeze(self.model.predict(self.dataset.test_x))
+        predictions = np.squeeze(self.model(torch.from_numpy(self.dataset.test_x)).to(self._device))
 
         # Transform the 2D predictions into a list of Series
         series_list = list()
@@ -82,13 +225,13 @@ class ESNModel(IModel):
             return self.forecast_autoregressive
         
         # Creates the window upon which a prediction takes place
-        init_window = np.expand_dims(self.dataset.train_x[-1, :], axis=0)
+        init_window = torch.from_numpy(np.expand_dims(self.dataset.train_x[-1, :], axis=0)).to(self._device)
 
         # Acumulate the predictions in a NDArray
         predictions = np.array([[]])
         for _ in range(self.dataset.n_test() // self.n_steps_out):
-            prediction = np.reshape(self.model.predict(init_window), (1, -1))
-            init_window = np.concatenate((init_window[:, self.n_steps_out:],  prediction), axis=1)
+            prediction = np.reshape(self.model(init_window), (1, -1))
+            init_window = torch.from_numpy(np.concatenate((init_window[:, self.n_steps_out:],  prediction), axis=1)).to(self._device)
             predictions = np.append(predictions, prediction)
         
         # Save forecasts and return the indexed Series
@@ -100,7 +243,7 @@ class ESNModel(IModel):
         return self.forecast_autoregressive
     
 
-    def predict(self):
+    def predict(self, n: int, autoreggressive: bool, shift: int = 0, **params: dict) -> pd.Series:
 
         # Get the forecast
         forecast = self.__predict_autoregressive() if autoreggressive else self.__predict_single(shift)
@@ -117,3 +260,16 @@ class ESNModel(IModel):
         return forecast.loc[start_idx:end_idx]
 
 
+
+# if __name__ == '__main__':
+#     MyESN_100_30 = ESNModel(
+#     dataset=pd.read_csv("datasets/Sunspots.csv"),
+#     n_steps_in=100,
+#     n_steps_out=30,
+#     test_frac=0.1,
+#     metric=None,
+#     )
+#     params = MyESN_100_30.tune()
+#     MyESN_100_30.fit(*params)
+#     forecast_autoregressive = MyESN_100_30.predict(-1, autoreggressive=True)
+#     MyESN_100_30.plotter.plot_forecast(forecast_autoregressive, xlim=(2500, 3300))
