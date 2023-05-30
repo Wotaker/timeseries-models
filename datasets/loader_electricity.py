@@ -30,7 +30,7 @@ class Dataset:
 def read_dataset(df: pd.DataFrame, electricity_consumer: str = "MT_002") -> Tuple[pd.Series, pd.Series]:
 
     # Preprocess data
-    df['Date'] = pd.to_datetime(df.index)
+    df['Date'] = pd.to_datetime(df['Date'])
     min_date_df_finder = df[electricity_consumer].replace(0., np.nan)
     start_date = min(min_date_df_finder.fillna(method='ffill').dropna().index)
     data_moved = df[df.index >= start_date]
