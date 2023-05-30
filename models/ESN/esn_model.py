@@ -14,14 +14,17 @@ from auto_esn.esn.reservoir.activation import Activation, Identity
 import optuna
 
 
+
 class Plotter():
 
-    def __init__(self, dataset: pd.Series) -> None:
+    def __init__(self, dataset: pd.Series, xlabel, ylabel) -> None:
         self.dataset_series = dataset
         self.metrices_map = {
             "RMSE": self.__get_RMSE,
             "MAPE": self.__get_MAPE
         }
+        self.xlabel = xlabel
+        self.ylabel = ylabel
 
     def __get_RMSE(self, y: pd.Series, y_hat: pd.Series, window: int = 10) -> Tuple[str, float, pd.Series]:
         
@@ -51,13 +54,16 @@ class Plotter():
         self,
         forecast_series: List[pd.Series],
         xlim: Tuple[int, int] | None = None,
-        metric_name: str = "RMSE"
+        ylim: Tuple[int, int] | None = None,
+        metric_name: str = "RMSE",
+        linestyle: str = 'None'
     ):
 
         metric_func = self.metrices_map[metric_name.upper()]
 
         # Scatter original data
-        plt.scatter(self.dataset_series.index, self.dataset_series.values, color='tab:blue', label='Original', s=2)
+        plt.plot(self.dataset_series.index, self.dataset_series.values, color='tab:blue', label='Original',
+                 marker='.', markersize=2, linestyle=linestyle)
 
         metric_vals = list()
         for series in forecast_series:
@@ -67,7 +73,8 @@ class Plotter():
             metric_vals.append(metric)
             
             # Scatter forecast
-            plt.scatter(series.index, series.values, color="tab:orange", s=2, alpha=0.1)
+            plt.plot(series.index, series.values, color="tab:orange", alpha=0.1,
+                     marker='.', markersize=2, linestyle=linestyle)
 
             # Plot evaluation metric
             plt.plot(metric_series.index, metric_series.values, color="red", alpha=0.1, lw=1)
@@ -75,15 +82,15 @@ class Plotter():
         metric_aggregated = np.mean(np.array(metric_vals))
 
         # Legend hack
-        plt.scatter([-10], [0], color="tab:orange", label='Prediction', s=2)
+        plt.plot([-10], [0], color="tab:orange", label='Prediction', marker='.', markersize=2, linestyle=linestyle)
         plt.plot([-10, -9], [0, 0], color="red", label=metric_name, alpha=0.5, lw=1)
 
         plt.legend()
-        plt.xlabel("Month index")
-        plt.ylabel("Monthly Mean Total Sunspot Number")
+        plt.xlabel(self.xlabel)
+        plt.ylabel(self.ylabel)
         plt.title(f"Sumaric forecast results\n{metric_name}: {round(metric_aggregated, 3)}")
         plt.xlim(xlim if xlim else (self.dataset_series.index[0], self.dataset_series.index[-1]))
-        plt.ylim(-20, self.dataset_series.max() * 1.2)
+        plt.ylim(ylim) if ylim else plt.ylim(0, self.dataset_series.max() * 1.2)
         plt.show()
     
     
@@ -91,7 +98,9 @@ class Plotter():
         self,
         forecast_series: pd.Series,
         xlim: Tuple[int, int] | None = None,
-        metric_name: str = "RMSE"
+        ylim: Tuple[int, int] | None = None,
+        metric_name: str = "RMSE",
+        linestyle: str = 'None'
     ):
 
         # Calculate metrices
@@ -99,22 +108,42 @@ class Plotter():
         metric_name, metric, metric_series = metric_func(y=self.dataset_series[forecast_series.index], y_hat=forecast_series)
 
         # Scatter original data
-        plt.scatter(self.dataset_series.index, self.dataset_series.values, color='tab:blue', label='Original', s=2)
+        plt.plot(self.dataset_series.index, self.dataset_series.values, color='tab:blue', label='Original',
+                 marker='.', markersize=2, linestyle=linestyle)
 
         # Scatter forecast
-        plt.scatter(forecast_series.index, forecast_series.values, color="tab:orange", label='Prediction', s=2)
+        plt.plot(forecast_series.index, forecast_series.values, color="tab:orange", label='Prediction',
+                 marker='.', markersize=2, linestyle=linestyle)
 
         # Plot evaluation metric
         plt.plot(metric_series.index, metric_series.values, color="red", label=metric_name, alpha=0.5)
 
         plt.legend()
-        plt.xlabel("Month index")
-        plt.ylabel("Monthly Mean Total Sunspot Number")
+        plt.xlabel(self.xlabel)
+        plt.ylabel(self.ylabel)
         plt.title(f"{metric_name}: {round(metric, 3)}")
         plt.xlim(xlim)
-        plt.ylim(-20, self.dataset_series.max() * 1.2)
+        plt.ylim(ylim) if ylim else plt.ylim(0, self.dataset_series.max() * 1.2)
         plt.show()
-
+    
+    def plot_dataset(
+        self,
+        xlim: Tuple[int, int] | None = None,
+        ylim: Tuple[int, int] | None = None,
+        linestyle: str = 'None',
+        save_path: str | None = None
+    ):
+        
+        # Scatter original data
+        plt.plot(self.dataset_series.index, self.dataset_series.values, color='tab:blue',
+                 marker='.', markersize=2, linestyle=linestyle)
+        
+        plt.xlabel(self.xlabel)
+        plt.ylabel(self.ylabel)
+        plt.xlim(xlim)
+        plt.ylim(ylim) if ylim else plt.ylim(0, self.dataset_series.max() * 1.2)
+        plt.savefig(save_path, bbox_inches='tight') if save_path else None
+        plt.show()
 
 
 class ESNModel(IModel):
@@ -140,8 +169,9 @@ class ESNModel(IModel):
             n_steps_out=n_steps_out,
             test_fraction=test_frac
         )
-
-        self.plotter = Plotter(self.dataset.series_all)
+        xlabel = params["xlabel"] if "xlabel" in params.keys() else None
+        ylabel = params["ylabel"] if "ylabel" in params.keys() else None
+        self.plotter = Plotter(self.dataset.series_all, xlabel, ylabel)
 
 
         self.forecasts = None
@@ -185,7 +215,6 @@ class ESNModel(IModel):
             # .regular_graph(4)\
             # .scale(0.9)\
             # .with_seed(23)\
-        print(hidden_size)
         w = WeightInitializer()
         w.weight_hh_init = i
         self.model = DeepESN(initializer = w, input_size=self.n_steps_in, hidden_size=hidden_size)
@@ -261,15 +290,16 @@ class ESNModel(IModel):
 
 
 
-# if __name__ == '__main__':
-#     MyESN_100_30 = ESNModel(
-#     dataset=pd.read_csv("datasets/Sunspots.csv"),
-#     n_steps_in=100,
-#     n_steps_out=30,
-#     test_frac=0.1,
-#     metric=None,
-#     )
-#     params = MyESN_100_30.tune()
-#     MyESN_100_30.fit(*params)
-#     forecast_autoregressive = MyESN_100_30.predict(-1, autoreggressive=True)
-#     MyESN_100_30.plotter.plot_forecast(forecast_autoregressive, xlim=(2500, 3300))
+if __name__ == '__main__':
+    MyESN_100_30 = ESNModel(
+    dataset=pd.read_csv("datasets/MackeyGlass.csv"),
+    n_steps_in=300,
+    n_steps_out=1,
+    test_frac=0.1,
+    metric=None,
+    )
+    # params = MyESN_100_30.tune()
+    # MyESN_100_30.fit(*params)
+    MyESN_100_30.fit()
+    forecast_autoregressive = MyESN_100_30.predict(-1, autoreggressive=True)
+    MyESN_100_30.plotter.plot_forecast(forecast_autoregressive)
